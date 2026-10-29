@@ -27,15 +27,24 @@ Starter structure for a Firebase-powered customer catalog and ordering system. A
 - Manager/Admin panel
 - Categories and groups
 - Products, packages, and services
-- Tables, rooms, and QR codes
-- Orders
+- Admins can configure size/variant labels per item (for example shoe sizes or clothing sizes), or up to 20 package weight options (for example 250 G, 500 G, 1 KG). Customers use BUY to open the cart and choose a configured option; weight prices are calculated from the item's per-KG rate.
+- Delivery checkout
 - WhatsApp settings
 - Business settings
+- Admins can set separate Dhaka and outside-Dhaka delivery charges; checkout updates the fee and total when the customer selects a district.
+
+## WhatsApp ordering
+- Customer checkout collects the customer's name, phone number, district, upazila, and street address. District/upazila options are bundled in the frontend and do not call a backend or external location API.
+- Checkout opens a prefilled WhatsApp message containing customer details, delivery address, cart items, total, and cash-on-delivery preference. It does not create a Firestore order record; the customer completes sending in WhatsApp.
+- Set the store's WhatsApp number in Admin → WhatsApp before accepting customer messages.
+- This flow does not include an online payment gateway, delivery pricing, stock reservation, or customer accounts.
+- District/upazila names are derived from `bangladesh-location-data` 1.0.6, licensed under MIT; the license notice is in `customer/js/bangladesh-locations.LICENSE`.
 
 ## Environment setup
 1. Create a Firebase project.
 2. Enable Firebase Authentication and Firestore.
 3. Copy `.env.example` to `.env` and fill in the Firebase web configuration values. The existing local `.env` is prefilled with this project's Firebase web configuration.
+   `FIREBASE_MEASUREMENT_ID` is optional and is only needed when configuring Firebase Analytics.
 4. For server-side Firebase token verification and account management, install Firebase Admin credentials on the server and set `GOOGLE_APPLICATION_CREDENTIALS` to the service-account JSON file path. Do not put that JSON file inside a public or committed folder. Set the primary account UID in `FIREBASE_PRIMARY_ADMIN_UID`; add its UID to `FIREBASE_ADMIN_UIDS` as well. The primary account can add admins, set their passwords, and remove non-primary admins from Admin Accounts.
 5. Deploy the included Firestore rules with `firebase deploy --only firestore:rules`. Public visitors can read catalog/site settings; only users with the server-issued `admin` custom claim can modify them. The primary admin receives this claim on its first successful admin access check. The Firebase web API key is public client configuration, not a security boundary.
 
@@ -46,8 +55,6 @@ Starter structure for a Firebase-powered customer catalog and ordering system. A
 - Uploads preserve the original file without browser-side JPEG recompression. Cloudinary serves responsive 1:1 card/cart crops and quality-optimized detail images constrained to the gallery's 4:3 area; original images remain available to fit the gallery without distortion.
 - Catalog item metadata and image URLs are stored in Firestore; image files are stored in Cloudinary. Removing an image from an item also requests deletion of its Cloudinary asset through the authenticated backend.
 - Admin passwords are never retrievable or displayed. Use the Admin Accounts page to set a new password. These management features require valid Firebase Admin credentials on the server.
-- In Admin → Tables, select whether checkout asks for a table or room number and set the total from 1 to 20. Customer checkout accepts only whole numbers from 1 through the configured total.
-
 The `.env` file is excluded by `.gitignore`. Keep production environment values and Firebase Admin credentials in your hosting provider's secret/environment configuration. Deploy the Express server behind HTTPS in production; do not expose the Cloudinary signing API over public plain HTTP.
 
 ## Faster repeat visits and offline cache

@@ -8,7 +8,7 @@
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
 	<script>if(localStorage.getItem('siteTheme')==='theme-dark')document.documentElement.classList.add('theme-dark');</script>
-	<link rel="stylesheet" href="css/customer.css?v=16">
+	<link rel="stylesheet" href="css/customer.css?v=26">
 </head>
 <body class="cart-page">
 	<header class="cart-header">
@@ -32,14 +32,54 @@
 				<span id="cart-items-count" aria-live="polite"></span>
 			</div>
 			<div id="cart" aria-live="polite"></div>
-			<div class="table-number-field">
-				<label id="location-number-label" for="table-number">Table number <span aria-hidden="true">*</span></label>
-				<input id="table-number" name="tableNumber" type="number" min="1" max="20" step="1" inputmode="numeric" autocomplete="off" placeholder="Enter your table number" required aria-required="true">
-			</div>
-			<button id="checkout" type="button">Place Order</button>
+			<form id="checkout-form" class="checkout-form">
+				<section id="delivery-fields" class="checkout-fields" aria-labelledby="delivery-heading">
+					<h2 id="delivery-heading" data-en="Delivery details" data-bn="ডেলিভারির তথ্য">Delivery details</h2>
+					<div class="checkout-field">
+						<label for="customer-name" data-en="Full name" data-bn="আপনার নাম">Full name</label>
+						<input id="customer-name" name="name" type="text" minlength="2" maxlength="100" autocomplete="name" required>
+					</div>
+					<div class="checkout-field">
+						<label for="customer-phone" data-en="Phone number" data-bn="ফোন নম্বর">Phone number</label>
+						<input id="customer-phone" name="phone" type="tel" minlength="7" maxlength="20" autocomplete="tel" inputmode="tel" required>
+					</div>
+					<div class="checkout-field">
+						<label id="district-label" for="district-trigger" data-en="District" data-bn="জেলা">District</label>
+						<div id="district-widget" class="searchable-select">
+							<select id="customer-district" class="searchable-select__native" name="district" tabindex="-1" aria-hidden="true"><option value=""></option></select>
+							<button id="district-trigger" class="searchable-select-trigger" type="button" role="combobox" aria-labelledby="district-label district-value" aria-expanded="false" aria-controls="district-options" aria-haspopup="listbox">
+								<span id="district-value">Select a district</span><span class="searchable-select-arrow" aria-hidden="true">&#9662;</span>
+							</button>
+							<div id="district-panel" class="searchable-select-panel" hidden>
+								<input id="district-search" type="search" role="searchbox" autocomplete="off" data-placeholder-en="Type to search districts" data-placeholder-bn="জেলা খুঁজতে লিখুন" placeholder="Type to search districts">
+								<div id="district-options" class="searchable-select-options" role="listbox" aria-labelledby="district-label"></div>
+							</div>
+						</div>
+					</div>
+					<div class="checkout-field">
+						<label id="upazila-label" for="upazila-trigger" data-en="Upazila" data-bn="উপজেলা">Upazila</label>
+						<div id="upazila-widget" class="searchable-select">
+							<select id="customer-upazila" class="searchable-select__native" name="upazila" tabindex="-1" aria-hidden="true" disabled><option value=""></option></select>
+							<button id="upazila-trigger" class="searchable-select-trigger" type="button" role="combobox" aria-labelledby="upazila-label upazila-value" aria-expanded="false" aria-controls="upazila-options" aria-haspopup="listbox" disabled>
+								<span id="upazila-value">Select a district first</span><span class="searchable-select-arrow" aria-hidden="true">&#9662;</span>
+							</button>
+							<div id="upazila-panel" class="searchable-select-panel" hidden>
+								<input id="upazila-search" type="search" role="searchbox" autocomplete="off" data-placeholder-en="Type to search upazilas" data-placeholder-bn="উপজেলা খুঁজতে লিখুন" placeholder="Type to search upazilas">
+								<div id="upazila-options" class="searchable-select-options" role="listbox" aria-labelledby="upazila-label"></div>
+							</div>
+						</div>
+					</div>
+					<div class="checkout-field">
+						<label for="customer-address" data-en="House, road, and delivery details" data-bn="বাড়ি, সড়ক ও ঠিকানার বিবরণ">House, road, and delivery details</label>
+						<textarea id="customer-address" name="address" rows="3" minlength="5" maxlength="500" autocomplete="street-address" required></textarea>
+					</div>
+				</section>
+				<p id="checkout-error" class="checkout-error" role="status" aria-live="polite"></p>
+				<button id="checkout" type="submit">Send order on WhatsApp</button>
+			</form>
 		</section>
 	</main>
 
-	<script type="module" src="js/cart.js?v=14"></script>
+	<script type="module" src="js/cart.js?v=27"></script>
 </body>
 </html>

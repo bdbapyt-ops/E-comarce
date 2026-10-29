@@ -1,4 +1,4 @@
-import { db, firebaseApp } from '../../shared/firebase.js';
+import { db, firebaseApp } from '../../shared/firebase.js?v=2';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, getDoc } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 import { getStorage, ref as storageRef, deleteObject } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js';
@@ -23,6 +23,14 @@ const descriptionInput = document.getElementById('item-description');
 const catInput = document.getElementById('item-category');
 const priceInput = document.getElementById('item-price');
 const discountInput = document.getElementById('item-discount');
+const selectionTypeInputs = form.querySelectorAll('input[name="item-selection-type"]');
+const sizeOptionsInput = document.getElementById('item-size-options');
+const sizeOptionsField = document.getElementById('size-options-field');
+const weightUnitsField = document.getElementById('weight-units-field');
+const weightAmountInput = document.getElementById('item-weight-amount');
+const weightUnitSelect = document.getElementById('item-weight-unit');
+const addWeightOptionButton = document.getElementById('add-weight-option');
+const weightOptionsList = document.getElementById('weight-options-list');
 const popularInput = document.getElementById('item-popular');
 const imageInput = document.getElementById('item-images');
 const previews = document.getElementById('image-previews');
@@ -35,6 +43,7 @@ let previewUrls = [];
 let removedImageIds = [];
 let currentUser = null;
 let isAdmin = false;
+let weightOptions = [];
 
 function setItemStatus(message, state='info'){
 	if(!itemStatus) return;
@@ -51,6 +60,83 @@ function firebaseErrorMessage(action, error){
 function getImageId(image){
 	return image.public_id || image.path || image.url;
 }
+
+function getSelectedOptionType(){
+	return form.querySelector('input[name="item-selection-type"]:checked')?.value || 'none';
+}
+
+function updateProductOptionFields(){
+	const selectionType = getSelectedOptionType();
+	sizeOptionsField.hidden = selectionType !== 'size';
+	weightUnitsField.hidden = selectionType !== 'weight';
+}
+
+function getSizeOptions(value){
+	const uniqueOptions = new Map();
+	value.split(',').map(option=>option.trim()).filter(Boolean).forEach(option=>{
+		const key = option.toLocaleLowerCase();
+		if(!uniqueOptions.has(key)) uniqueOptions.set(key,option);
+	});
+	return [...uniqueOptions.values()];
+}
+
+function renderWeightOptions(){
+	weightOptionsList.replaceChildren();
+	weightOptions.forEach((option,index)=>{
+		const chip = document.createElement('span');
+		chip.className = 'weight-option-chip';
+		const label = document.createElement('span');
+		label.textContent = `${option.amount} ${option.unit}`;
+		const removeButton = document.createElement('button');
+		removeButton.type = 'button';
+		removeButton.className = 'remove-weight-option';
+		removeButton.setAttribute('aria-label',`Remove ${option.amount} ${option.unit}`);
+		removeButton.textContent = '×';
+		removeButton.addEventListener('click',()=>{
+			weightOptions.splice(index,1);
+			renderWeightOptions();
+		});
+		chip.append(label,removeButton);
+		weightOptionsList.appendChild(chip);
+	});
+}
+
+function addWeightOption(){
+	const amount = weightAmountInput.valueAsNumber;
+	const unit = weightUnitSelect.value;
+	if(!Number.isFinite(amount) || amount <= 0){
+		setItemStatus('Enter a valid weight greater than zero.', 'error');
+		weightAmountInput.focus();
+		return;
+	}
+	if(weightOptions.some(option=>option.amount === amount && option.unit === unit)){
+		setItemStatus('That weight option has already been added.', 'error');
+		weightAmountInput.focus();
+		return;
+	}
+	if(weightOptions.length >= 20){
+		setItemStatus('A product can have up to 20 weight options.', 'error');
+		return;
+	}
+	weightOptions.push({amount,unit});
+	weightOptions.sort((left,right)=>{
+		const kilograms = option=>option.amount * (option.unit === 'KG' ? 1 : option.unit === 'G' ? 0.001 : 0.000001);
+		return kilograms(left)-kilograms(right);
+	});
+	weightAmountInput.value = '';
+	renderWeightOptions();
+	setItemStatus(`${amount} ${unit} weight option added.`, 'success');
+}
+
+selectionTypeInputs.forEach(input=>input.addEventListener('change',updateProductOptionFields));
+addWeightOptionButton.addEventListener('click',addWeightOption);
+weightAmountInput.addEventListener('keydown',event=>{
+	if(event.key === 'Enter'){
+		event.preventDefault();
+		addWeightOption();
+	}
+});
+updateProductOptionFields();
 
 async function uploadImageToCloudinary(file){
 	const token = await currentUser.getIdToken();
@@ -185,10 +271,13 @@ imageInput && imageInput.addEventListener('change', ()=>{
 resetButton && resetButton.addEventListener('click', ()=>{
 	form.reset();
 	idInput.value = '';
+	weightOptions = [];
+	renderWeightOptions();
 	selectedFiles = [];
 	existingImages = [];
 	removedImageIds = [];
 	imageInput.value = '';
+	updateProductOptionFields();
 	showPreviewsFromSelected();
 	setItemStatus('Form reset.', 'info');
 });
@@ -230,7 +319,10 @@ async function renderItems(){
 					el.appendChild(thumb);
 				}
 				const details = document.createElement('span');
-				details.textContent = `${data.name || 'Unnamed item'} — ${data.category || 'Uncategorized'} — ৳${Number(data.price) || 0}`;
+				const optionCount = Array.isArray(data.selectionOptions) ? data.selectionOptions.length : 0;
+				const weightOptionCount = Array.isArray(data.weightOptions) ? data.weightOptions.length : 0;
+				const selectionLabel = data.selectionType === 'size' ? ` — ${optionCount || 4} size options` : data.selectionType === 'weight' ? ` — ${weightOptionCount || 'Legacy'} weight options` : '';
+				details.textContent = `${data.name || 'Unnamed item'} — ${data.category || 'Uncategorized'} — ৳${Number(data.price) || 0}${selectionLabel}`;
 				const actions = document.createElement('div');
 				const editButton = document.createElement('button');
 				editButton.dataset.id = docSnap.id;
@@ -262,6 +354,34 @@ async function renderItems(){
 		setItemStatus('This account is not authorized to manage items.', 'error');
 		return;
 	}
+	const selectionType = getSelectedOptionType();
+	if(!['none','size','weight'].includes(selectionType)){
+		setItemStatus('Choose a valid customer selection type.', 'error');
+		return;
+	}
+	const selectionOptions = selectionType === 'size' ? getSizeOptions(sizeOptionsInput.value) : [];
+	const configuredWeightOptions = selectionType === 'weight' ? weightOptions.map(option=>({...option})) : [];
+	const weightUnits = [...new Set(configuredWeightOptions.map(option=>option.unit))];
+	if(selectionType === 'size' && !selectionOptions.length){
+		setItemStatus('Add at least one size or variant option.', 'error');
+		sizeOptionsInput.focus();
+		return;
+	}
+	if(selectionType === 'size' && selectionOptions.length > 20){
+		setItemStatus('A product can have up to 20 size or variant options.', 'error');
+		sizeOptionsInput.focus();
+		return;
+	}
+	if(selectionType === 'size' && selectionOptions.some(option=>option.length > 30)){
+		setItemStatus('Each size or variant option must be 30 characters or fewer.', 'error');
+		sizeOptionsInput.focus();
+		return;
+	}
+	if(selectionType === 'weight' && !configuredWeightOptions.length){
+		setItemStatus('Add at least one weight option for customers.', 'error');
+		weightAmountInput.focus();
+		return;
+	}
 
 	const payload = {
 		name: nameInput.value.trim(),
@@ -269,6 +389,10 @@ async function renderItems(){
 		category: catInput && catInput.value ? catInput.value.trim() : 'Uncategorized',
 		price: Number(priceInput.value) || 0,
 		discount: Number(discountInput ? discountInput.value : 0) || 0,
+		selectionType,
+		selectionOptions,
+		weightOptions: configuredWeightOptions,
+		weightUnits,
 		popular: Boolean(popularInput?.checked),
 		updatedAt: Date.now()
 	};
@@ -310,6 +434,9 @@ async function renderItems(){
 		);
 
 		form.reset(); idInput.value = '';
+		weightOptions = [];
+		renderWeightOptions();
+		updateProductOptionFields();
 		existingImages = [];
 		if (discountInput) discountInput.value = 0;
 		if (imageInput) imageInput.value = '';
@@ -348,6 +475,18 @@ list.addEventListener('click', async (ev)=>{
 			catInput.value = data.category || '';
 			priceInput.value = data.price || 0;
 			discountInput.value = data.discount || 0;
+			const selectionType = ['size','weight'].includes(data.selectionType) ? data.selectionType : 'none';
+			const selectionInput = Array.from(selectionTypeInputs).find(input=>input.value === selectionType);
+			if(selectionInput) selectionInput.checked = true;
+			sizeOptionsInput.value = selectionType === 'size'
+				? (Array.isArray(data.selectionOptions) && data.selectionOptions.length ? data.selectionOptions.filter(option=>typeof option === 'string').join(', ') : 'M, L, XL, XXL')
+				: '';
+			weightOptions = Array.isArray(data.weightOptions)
+				? data.weightOptions.filter(option=>Number.isFinite(Number(option?.amount)) && Number(option.amount) > 0 && ['KG','G','MG'].includes(option.unit)).slice(0,20).map(option=>({amount:Number(option.amount),unit:option.unit}))
+				: [];
+			renderWeightOptions();
+			updateProductOptionFields();
+			form.scrollIntoView({behavior:'smooth',block:'start'});
 			if(popularInput) popularInput.checked = typeof data.popular === 'boolean'
 				? data.popular
 				: Boolean(data.featured || data.isPopular);

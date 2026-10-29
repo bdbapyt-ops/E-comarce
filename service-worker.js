@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'restaurant-menu-v4';
+const CACHE_VERSION = 'restaurant-menu-v15';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const ASSET_CACHE = `${CACHE_VERSION}-assets`;
 

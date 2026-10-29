@@ -1,5 +1,5 @@
-import { initializeAdminLayout } from './layout.js?v=7';
-import { firebaseApp } from '../../shared/firebase.js';
+import { initializeAdminLayout } from './layout.js?v=9';
+import { firebaseApp } from '../../shared/firebase.js?v=2';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 
 initializeAdminLayout();

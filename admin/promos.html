@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
+	<title>Promo Codes</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+	<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" media="print" onload="this.media='all'">
+	<link rel="stylesheet" href="css/admin.css?v=9">
+</head>
+<body>
+	<main>
+		<div class="page-header">
+			<div>
+				<p class="eyebrow">Promotions</p>
+				<h1>Add promo</h1>
+			</div>
+		</div>
+		<div class="panel-grid">
+			<section class="panel">
+				<h2>Create promo code</h2>
+				<form id="promo-form" class="admin-form">
+					<div class="field-group">
+						<label for="promo-code">Promo code</label>
+						<input id="promo-code" type="text" minlength="3" maxlength="32" pattern="[A-Za-z0-9_-]{3,32}" autocomplete="off" autocapitalize="characters" placeholder="e.g. SAVE20" required>
+						<small>Use 3–32 letters, numbers, hyphens, or underscores. Codes ignore letter case.</small>
+					</div>
+					<div class="field-group">
+						<label for="promo-type">Discount type</label>
+						<select id="promo-type" required>
+							<option value="percent">Percentage off</option>
+							<option value="fixed">Fixed taka off</option>
+							<option value="free_delivery">Free delivery</option>
+						</select>
+					</div>
+					<div id="promo-value-field" class="field-group">
+						<label for="promo-value">Discount value</label>
+						<input id="promo-value" type="number" min="0.01" max="100" step="0.01" inputmode="decimal" placeholder="20" required>
+						<small id="promo-value-help">Enter a percentage from 0.01 to 100.</small>
+					</div>
+					<p id="promo-status" class="form-status" role="status" aria-live="polite"></p>
+					<button id="save-promo" class="primary-btn" type="submit">Save promo</button>
+				</form>
+			</section>
+			<section class="panel">
+				<div class="admin-account-list-heading">
+					<h2>Saved promo codes</h2>
+					<span id="promo-count" class="admin-account-count">0</span>
+				</div>
+				<div id="promo-list" class="promo-list" aria-live="polite"></div>
+			</section>
+		</div>
+	</main>
+	<script type="module" src="js/auth.js?v=14"></script>
+	<script type="module" src="js/promos.js?v=1"></script>
+</body>
+</html>

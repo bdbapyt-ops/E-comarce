@@ -1,5 +1,5 @@
 // Settings persistence with Firestore + localStorage fallback.
-import { db } from '../../shared/firebase.js';
+import { db } from '../../shared/firebase.js?v=2';
 import { doc, setDoc, getDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 const form = document.getElementById('settings-form');
@@ -10,6 +10,8 @@ const topbarColorInput = document.getElementById('topbar-color');
 const topbarColorValue = document.getElementById('topbar-color-value');
 const buttonColorInput = document.getElementById('button-color');
 const buttonColorValue = document.getElementById('button-color-value');
+const deliveryChargeDhakaInput = document.getElementById('delivery-charge-dhaka');
+const deliveryChargeOutsideInput = document.getElementById('delivery-charge-outside');
 const previewHeader = document.getElementById('settings-preview-header');
 const previewName = document.getElementById('settings-preview-name');
 const previewButton = document.getElementById('settings-preview-button');
@@ -116,6 +118,10 @@ async function loadSettings(){
 				const savedLogo = data.logoUrl || '';
 				updateTopbarColor(data.topbarColor || defaultTopbarColor);
 				updateButtonColor(data.buttonColor || defaultButtonColor);
+				deliveryChargeDhakaInput.value = String(Number.isFinite(Number(data.deliveryChargeDhaka)) ? data.deliveryChargeDhaka : 0);
+				deliveryChargeOutsideInput.value = String(Number.isFinite(Number(data.deliveryChargeOutside)) ? data.deliveryChargeOutside : 0);
+				localStorage.setItem('deliveryChargeDhaka',deliveryChargeDhakaInput.value);
+				localStorage.setItem('deliveryChargeOutside',deliveryChargeOutsideInput.value);
 				updateLogoPreview(savedLogo);
 				localStorage.setItem('restaurantName', restaurantNameInput.value || 'Your Business');
 				localStorage.setItem('siteLogoUrl', savedLogo);
@@ -128,6 +134,8 @@ async function loadSettings(){
 	const logoUrl = localStorage.getItem('siteLogoUrl') || '';
 	const topbarColor = normalizeColor(localStorage.getItem('topbarColor') || defaultTopbarColor);
 	const buttonColor = normalizeColor(localStorage.getItem('buttonColor') || defaultButtonColor, defaultButtonColor);
+	deliveryChargeDhakaInput.value = localStorage.getItem('deliveryChargeDhaka') || '0';
+	deliveryChargeOutsideInput.value = localStorage.getItem('deliveryChargeOutside') || '0';
 	restaurantNameInput.value = restaurantName;
 	updateNamePreview();
 	updateLogoPreview(logoUrl);
@@ -142,15 +150,31 @@ async function saveSettings(e){
 	const logoUrl = localStorage.getItem('siteLogoUrl') || '';
 	const topbarColor = normalizeColor(topbarColorInput ? topbarColorInput.value : topbarColorValue.value);
 	const buttonColor = normalizeColor(buttonColorInput ? buttonColorInput.value : buttonColorValue.value, defaultButtonColor);
-	pendingSettings = { restaurantName, logoUrl, topbarColor, buttonColor };
+	const deliveryChargeDhaka = deliveryChargeDhakaInput.valueAsNumber;
+	const deliveryChargeOutside = deliveryChargeOutsideInput.valueAsNumber;
+	if(!Number.isFinite(deliveryChargeDhaka) || deliveryChargeDhaka < 0 || deliveryChargeDhaka > 100000){
+		deliveryChargeDhakaInput.setCustomValidity('Enter a delivery charge between 0 and 100,000.');
+		deliveryChargeDhakaInput.reportValidity();
+		deliveryChargeDhakaInput.setCustomValidity('');
+		return;
+	}
+	if(!Number.isFinite(deliveryChargeOutside) || deliveryChargeOutside < 0 || deliveryChargeOutside > 100000){
+		deliveryChargeOutsideInput.setCustomValidity('Enter a delivery charge between 0 and 100,000.');
+		deliveryChargeOutsideInput.reportValidity();
+		deliveryChargeOutsideInput.setCustomValidity('');
+		return;
+	}
+	pendingSettings = { restaurantName, logoUrl, topbarColor, buttonColor, deliveryChargeDhaka, deliveryChargeOutside };
 
 	if(db){
 		try{
-			await setDoc(doc(db,'config','site'), { restaurantName, logoUrl, topbarColor, buttonColor }, { merge: true });
+			await setDoc(doc(db,'config','site'), { restaurantName, logoUrl, topbarColor, buttonColor, deliveryChargeDhaka, deliveryChargeOutside }, { merge: true });
 			localStorage.setItem('restaurantName', restaurantName);
 			localStorage.setItem('siteLogoUrl', logoUrl);
 			updateTopbarColor(topbarColor);
 			updateButtonColor(buttonColor);
+			localStorage.setItem('deliveryChargeDhaka',String(deliveryChargeDhaka));
+			localStorage.setItem('deliveryChargeOutside',String(deliveryChargeOutside));
 			msg.innerText = 'Added';
 		}catch(err){
 			console.warn('Failed to save to Firestore, saving locally', err);
@@ -159,6 +183,8 @@ async function saveSettings(e){
 			localStorage.setItem('siteLogoUrl', logoUrl);
 			updateTopbarColor(topbarColor);
 			updateButtonColor(buttonColor);
+			localStorage.setItem('deliveryChargeDhaka',String(deliveryChargeDhaka));
+			localStorage.setItem('deliveryChargeOutside',String(deliveryChargeOutside));
 			msg.innerText = 'Saved locally (Firestore error).';
 		}
 	}else{
@@ -167,6 +193,8 @@ async function saveSettings(e){
 		localStorage.setItem('siteLogoUrl', logoUrl);
 		updateTopbarColor(topbarColor);
 		updateButtonColor(buttonColor);
+		localStorage.setItem('deliveryChargeDhaka',String(deliveryChargeDhaka));
+		localStorage.setItem('deliveryChargeOutside',String(deliveryChargeOutside));
 		msg.innerText = 'Saved locally.';
 	}
 
@@ -187,7 +215,9 @@ if(db){
 					const matchesPending = (data.restaurantName || 'Your Business') === pendingSettings.restaurantName
 						&& (data.logoUrl || '') === pendingSettings.logoUrl
 						&& (data.topbarColor || defaultTopbarColor) === pendingSettings.topbarColor
-						&& (data.buttonColor || defaultButtonColor) === pendingSettings.buttonColor;
+						&& (data.buttonColor || defaultButtonColor) === pendingSettings.buttonColor
+						&& Number(data.deliveryChargeDhaka || 0) === pendingSettings.deliveryChargeDhaka
+						&& Number(data.deliveryChargeOutside || 0) === pendingSettings.deliveryChargeOutside;
 					if(!matchesPending) return;
 					pendingSettings = null;
 				}
@@ -200,6 +230,10 @@ if(db){
 				updateLogoPreview(fireLogo);
 				updateTopbarColor(fireTopbarColor);
 				updateButtonColor(fireButtonColor);
+				deliveryChargeDhakaInput.value = String(Number.isFinite(Number(data.deliveryChargeDhaka)) ? data.deliveryChargeDhaka : 0);
+				deliveryChargeOutsideInput.value = String(Number.isFinite(Number(data.deliveryChargeOutside)) ? data.deliveryChargeOutside : 0);
+				localStorage.setItem('deliveryChargeDhaka',deliveryChargeDhakaInput.value);
+				localStorage.setItem('deliveryChargeOutside',deliveryChargeOutsideInput.value);
 				localStorage.setItem('restaurantName', restaurantNameInput.value || 'Your Business');
 				localStorage.setItem('siteLogoUrl', fireLogo);
 			}
@@ -208,5 +242,5 @@ if(db){
 }
 
 window.addEventListener('storage', (e)=>{
-	if(e.key === 'siteLogoUrl' || e.key === 'restaurantName' || e.key === 'topbarColor' || e.key === 'buttonColor') loadSettings();
+	if(e.key === 'siteLogoUrl' || e.key === 'restaurantName' || e.key === 'topbarColor' || e.key === 'buttonColor' || e.key === 'deliveryChargeDhaka' || e.key === 'deliveryChargeOutside') loadSettings();
 });

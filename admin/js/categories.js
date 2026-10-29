@@ -1,4 +1,4 @@
-import { db } from '../../shared/firebase.js';
+import { db } from '../../shared/firebase.js?v=2';
 import { collection, addDoc, onSnapshot, deleteDoc, doc } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 const categoryName = document.getElementById('categoryName');

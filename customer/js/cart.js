@@ -1,6 +1,8 @@
-import { getUrlParams } from './restaurant.js';
-import { db } from '../../shared/firebase.js';
+import { db } from '../../shared/firebase.js?v=2';
+import { getCatalogSelectionKey, getCatalogSelectionLabel, getCatalogUnitPrice, getCatalogWeightOptions } from '../../shared/catalog-options.js?v=3';
+import { getDeliveryCharge } from '../../shared/delivery-pricing.js?v=1';
 import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
+import { bangladeshDistricts } from './bangladesh-locations.js';
 
 let storedCart = [];
 try{
@@ -14,15 +16,30 @@ try{
 const cart = [];
 const el = document.getElementById('cart');
 const checkoutBtn = document.getElementById('checkout');
+const checkoutForm = document.getElementById('checkout-form');
+const checkoutError = document.getElementById('checkout-error');
+const deliveryFields = document.getElementById('delivery-fields');
+const customerNameInput = document.getElementById('customer-name');
+const customerPhoneInput = document.getElementById('customer-phone');
+const customerAddressInput = document.getElementById('customer-address');
+const districtSearch = document.getElementById('district-search');
+const districtSelect = document.getElementById('customer-district');
+const districtTrigger = document.getElementById('district-trigger');
+const districtValue = document.getElementById('district-value');
+const districtPanel = document.getElementById('district-panel');
+const districtOptions = document.getElementById('district-options');
+const upazilaSearch = document.getElementById('upazila-search');
+const upazilaSelect = document.getElementById('customer-upazila');
+const upazilaTrigger = document.getElementById('upazila-trigger');
+const upazilaValue = document.getElementById('upazila-value');
+const upazilaPanel = document.getElementById('upazila-panel');
+const upazilaOptions = document.getElementById('upazila-options');
 const cartItemsCount = document.getElementById('cart-items-count');
-const tableNumberInput = document.getElementById('table-number');
-const locationNumberLabel = document.getElementById('location-number-label');
-let checkoutLocationType = localStorage.getItem('checkoutLocationType') === 'room' ? 'room' : 'table';
-let checkoutLocationCount = Number(localStorage.getItem('checkoutLocationCount'));
 let checkoutSettingsReady = false;
-if(!Number.isInteger(checkoutLocationCount) || checkoutLocationCount < 1 || checkoutLocationCount > 20) checkoutLocationCount = 1;
-const { tableId } = getUrlParams();
-if(tableId && /^\d+$/.test(tableId)) tableNumberInput.value = tableId;
+let siteSettings = {
+	deliveryChargeDhaka:Number(localStorage.getItem('deliveryChargeDhaka')) || 0,
+	deliveryChargeOutside:Number(localStorage.getItem('deliveryChargeOutside')) || 0
+};
 const catalogUrl = location.pathname === '/cart.html'
 	? new URL('/', location.origin)
 	: new URL('index.html', document.baseURI);
@@ -54,43 +71,369 @@ function getCartImageUrl(url){
 	return url.replace(uploadPath,`${uploadPath}f_auto,q_auto:good,c_fill,g_auto,w_336,h_336/`);
 }
 
-function applyCheckoutLocation(settings){
-	checkoutLocationType = settings.locationType === 'room' ? 'room' : 'table';
-	const count = Number(settings.locationCount);
-	checkoutLocationCount = Number.isInteger(count) && count >= 1 && count <= 20 ? count : 1;
-	const isRoom = checkoutLocationType === 'room';
-	const label = isRoom ? 'Room number' : 'Table number';
-	const placeholder = isRoom ? 'Enter your room number' : 'Enter your table number';
-	const lang = localStorage.getItem('lang') || 'en';
-	const translatedLabel = lang === 'bn'
-		? (isRoom ? 'রুম নম্বর' : 'টেবিল নম্বর')
-		: label;
-	locationNumberLabel.firstChild.textContent = `${translatedLabel} `;
-	tableNumberInput.placeholder = lang === 'bn'
-		? (isRoom ? 'আপনার রুম নম্বর লিখুন' : 'আপনার টেবিল নম্বর লিখুন')
-		: placeholder;
-	tableNumberInput.max = String(checkoutLocationCount);
-	tableNumberInput.setCustomValidity('');
-	tableNumberInput.removeAttribute('aria-invalid');
-	localStorage.setItem('checkoutLocationType',checkoutLocationType);
-	localStorage.setItem('checkoutLocationCount',String(checkoutLocationCount));
+function getLocationLabel(location){
+	return localStorage.getItem('lang') === 'bn' ? location.bn : location.en;
 }
 
-applyCheckoutLocation({locationType:checkoutLocationType,locationCount:checkoutLocationCount});
+function makeLocationOption(location,selectedId){
+	const option = document.createElement('button');
+	option.type = 'button';
+	option.className = 'searchable-select-option';
+	option.setAttribute('role','option');
+	option.setAttribute('aria-selected',String(location.id === selectedId));
+	option.dataset.value = location.id;
+	option.textContent = getLocationLabel(location);
+	return option;
+}
+
+function renderDistrictOptions(){
+	const selectedDistrict = districtSelect.value;
+	const query = districtSearch.value.trim().toLocaleLowerCase();
+	const matches = bangladeshDistricts.filter(district=>
+		`${district.en} ${district.bn}`.toLocaleLowerCase().includes(query)
+	);
+	const isBangla = localStorage.getItem('lang') === 'bn';
+	districtSelect.replaceChildren(new Option('', ''));
+	const selected = bangladeshDistricts.find(district=>district.id === selectedDistrict);
+	const placeholder = isBangla ? 'জেলা নির্বাচন করুন' : 'Select a district';
+	districtValue.textContent = selected ? getLocationLabel(selected) : placeholder;
+	bangladeshDistricts.forEach(district=>districtSelect.add(new Option(getLocationLabel(district),district.id)));
+	districtSelect.value = selectedDistrict;
+	districtOptions.replaceChildren(...matches.map(district=>makeLocationOption(district,selectedDistrict)));
+}
+
+function renderUpazilaOptions(){
+	const selectedUpazila = upazilaSelect.value;
+	const district = bangladeshDistricts.find(item=>item.id === districtSelect.value);
+	const query = upazilaSearch.value.trim().toLocaleLowerCase();
+	const matches = district
+		? district.upazilas.filter(upazila=>`${upazila.en} ${upazila.bn}`.toLocaleLowerCase().includes(query))
+		: [];
+	const isBangla = localStorage.getItem('lang') === 'bn';
+	const selected = district?.upazilas.find(upazila=>upazila.id === selectedUpazila);
+	upazilaTrigger.disabled = !district;
+	upazilaSearch.disabled = !district;
+	upazilaSearch.placeholder = isBangla ? 'উপজেলা খুঁজতে লিখুন' : 'Type to search upazilas';
+	upazilaSelect.disabled = !district;
+	upazilaSelect.replaceChildren(new Option('', ''));
+	if(district) district.upazilas.forEach(upazila=>upazilaSelect.add(new Option(getLocationLabel(upazila),upazila.id)));
+	upazilaSelect.value = selected?.id || '';
+	upazilaValue.textContent = selected
+		? getLocationLabel(selected)
+		: (district ? (isBangla ? 'উপজেলা নির্বাচন করুন' : 'Select an upazila') : (isBangla ? 'আগে জেলা নির্বাচন করুন' : 'Select a district first'));
+	upazilaOptions.replaceChildren(...matches.map(upazila=>makeLocationOption(upazila,selectedUpazila)));
+}
+
+function applyCheckoutLanguage(){
+	const isBangla = localStorage.getItem('lang') === 'bn';
+	document.documentElement.lang = isBangla ? 'bn' : 'en';
+	deliveryFields.querySelectorAll('[data-en][data-bn]').forEach(label=>{
+		label.textContent = label.dataset[isBangla ? 'bn' : 'en'];
+	});
+	checkoutBtn.textContent = isBangla ? 'হোয়াটসঅ্যাপে অর্ডার পাঠান' : 'Send order on WhatsApp';
+	districtSearch.placeholder = isBangla ? 'জেলা খুঁজতে লিখুন' : 'Type to search districts';
+	renderDistrictOptions();
+	renderUpazilaOptions();
+}
+
+applyCheckoutLanguage();
+
+function closeLocationDropdown(widget,panel,trigger){
+	panel.hidden = true;
+	trigger.setAttribute('aria-expanded','false');
+	widget.classList.remove('is-open');
+}
+
+function openLocationDropdown(widget,panel,trigger,search,renderOptions){
+	const otherDropdowns = [
+		[districtWidget,districtPanel,districtTrigger],
+		[upazilaWidget,upazilaPanel,upazilaTrigger]
+	];
+	otherDropdowns.forEach(([otherWidget,otherPanel,otherTrigger])=>{
+		if(otherWidget !== widget) closeLocationDropdown(otherWidget,otherPanel,otherTrigger);
+	});
+	search.value = '';
+	renderOptions();
+	panel.hidden = false;
+	trigger.setAttribute('aria-expanded','true');
+	widget.classList.add('is-open');
+	search.focus();
+}
+
+const districtWidget = document.getElementById('district-widget');
+const upazilaWidget = document.getElementById('upazila-widget');
+
+districtTrigger.addEventListener('click',()=>{
+	if(districtPanel.hidden) openLocationDropdown(districtWidget,districtPanel,districtTrigger,districtSearch,renderDistrictOptions);
+	else closeLocationDropdown(districtWidget,districtPanel,districtTrigger);
+});
+upazilaTrigger.addEventListener('click',()=>{
+	if(upazilaPanel.hidden) openLocationDropdown(upazilaWidget,upazilaPanel,upazilaTrigger,upazilaSearch,renderUpazilaOptions);
+	else closeLocationDropdown(upazilaWidget,upazilaPanel,upazilaTrigger);
+});
+
+districtSearch.addEventListener('input',renderDistrictOptions);
+upazilaSearch.addEventListener('input',renderUpazilaOptions);
+districtOptions.addEventListener('click',event=>{
+	const option = event.target.closest('button[data-value]');
+	if(!option) return;
+	districtSelect.value = option.dataset.value;
+	districtSearch.value = '';
+	upazilaSelect.value = '';
+	upazilaSearch.value = '';
+	renderDistrictOptions();
+	renderUpazilaOptions();
+	renderCart();
+	closeLocationDropdown(districtWidget,districtPanel,districtTrigger);
+	checkoutError.textContent = '';
+});
+upazilaOptions.addEventListener('click',event=>{
+	const option = event.target.closest('button[data-value]');
+	if(!option) return;
+	upazilaSelect.value = option.dataset.value;
+	upazilaSearch.value = '';
+	renderUpazilaOptions();
+	closeLocationDropdown(upazilaWidget,upazilaPanel,upazilaTrigger);
+	checkoutError.textContent = '';
+});
+document.addEventListener('click',event=>{
+	if(!districtWidget.contains(event.target)) closeLocationDropdown(districtWidget,districtPanel,districtTrigger);
+	if(!upazilaWidget.contains(event.target)) closeLocationDropdown(upazilaWidget,upazilaPanel,upazilaTrigger);
+});
+document.addEventListener('keydown',event=>{
+	if(event.key !== 'Escape') return;
+	if(!districtPanel.hidden){
+		closeLocationDropdown(districtWidget,districtPanel,districtTrigger);
+		districtTrigger.focus();
+	}
+	if(!upazilaPanel.hidden){
+		closeLocationDropdown(upazilaWidget,upazilaPanel,upazilaTrigger);
+		upazilaTrigger.focus();
+	}
+});
+
+districtSelect.addEventListener('change',()=>{
+	upazilaSearch.value = '';
+	upazilaSelect.value = '';
+	renderUpazilaOptions();
+	renderCart();
+});
+window.addEventListener('storage',event=>{
+	if(event.key === 'lang'){
+		applyCheckoutLanguage();
+		renderCart();
+	}
+});
 
 applyButtonColor(localStorage.getItem('buttonColor'));
 window.addEventListener('storage',event=>{
 	if(event.key === 'buttonColor') applyButtonColor(event.newValue);
-	if(event.key === 'checkoutLocationType' || event.key === 'checkoutLocationCount'){
-		applyCheckoutLocation({
-			locationType:localStorage.getItem('checkoutLocationType'),
-			locationCount:localStorage.getItem('checkoutLocationCount')
-		});
-	}
 });
 
 function productKey(item){
+	return `${productIdentity(item)}|selection:${getCatalogSelectionKey(item.selection)}`;
+}
+
+function productIdentity(item){
 	return item.id ? `id:${item.id}` : `name:${item.name || ''}|${item.category || ''}`;
+}
+
+function availableSizes(item){
+	const options = Array.isArray(item.selectionOptions)
+		? [...new Set(item.selectionOptions.filter(option=>typeof option === 'string').map(option=>option.trim()).filter(option=>option && option.length <= 30))]
+		: [];
+	return options.length ? options.slice(0,20) : ['M','L','XL','XXL'];
+}
+
+function availableWeightUnits(item){
+	const validUnits = new Set(['KG','G','MG']);
+	const options = Array.isArray(item.weightUnits) ? [...new Set(item.weightUnits.filter(unit=>validUnits.has(unit)))] : ['KG','MG'];
+	return options.length ? options : ['KG'];
+}
+
+function hasValidWeightSelection(item){
+	if(item.selection?.type !== 'weight' || getCatalogSelectionKey(item.selection) === 'none') return false;
+	const configuredOptions = getCatalogWeightOptions(item);
+	if(configuredOptions.length){
+		return configuredOptions.some(option=>option.amount === Number(item.selection.amount) && option.unit === item.selection.unit);
+	}
+	return availableWeightUnits(item).includes(item.selection.unit);
+}
+
+function selectionIsValid(item){
+	if(item.selectionType === 'size'){
+		return item.selection?.type === 'size'
+			&& typeof item.selection.value === 'string'
+			&& availableSizes(item).some(size=>size.toLocaleLowerCase() === item.selection.value.trim().toLocaleLowerCase())
+			&& getCatalogSelectionKey(item.selection) !== 'none';
+	}
+	if(item.selectionType === 'weight'){
+		return hasValidWeightSelection(item);
+	}
+	return true;
+}
+
+function updateCheckoutAvailability(){
+	checkoutBtn.disabled = !checkoutSettingsReady || !cart.length || cart.some(item=>!selectionIsValid(item));
+}
+
+function setCartSelection(index,selection){
+	const item = cart[index];
+	if(!item) return;
+	item.selection = selection;
+	const selectionKey = getCatalogSelectionKey(selection);
+	if(selectionKey !== 'none'){
+		const duplicateIndex = cart.findIndex((entry,entryIndex)=>
+			entryIndex !== index
+			&& productIdentity(entry) === productIdentity(item)
+			&& getCatalogSelectionKey(entry.selection) === selectionKey
+		);
+		if(duplicateIndex !== -1){
+			cart[duplicateIndex].quantity += item.quantity;
+			cart.splice(index,1);
+		}
+	}
+	saveCart();
+	renderCart();
+}
+
+function refreshCartPrices(){
+	let total = 0;
+	cart.forEach((item,index)=>{
+		const isValid = selectionIsValid(item);
+		const unitPrice = itemPrice(item);
+		const hasWeightSelection = item.selectionType === 'weight' && isValid;
+		const lineTotal = item.selectionType === 'weight' && !isValid ? 0 : unitPrice * item.quantity;
+		total += lineTotal;
+		const price = el.querySelector(`[data-cart-price="${index}"]`);
+		const itemTotal = el.querySelector(`[data-cart-total="${index}"]`);
+		const selectionLabel = el.querySelector(`[data-cart-selection="${index}"]`);
+		if(price){
+			price.textContent = item.selectionType === 'weight' && !hasWeightSelection
+				? `৳${formatMoney(getCatalogUnitPrice({...item,selection:null}))} / kg`
+				: `৳${formatMoney(unitPrice)} each`;
+		}
+		if(itemTotal){
+			itemTotal.textContent = isValid ? `৳${formatMoney(lineTotal)}` : (localStorage.getItem('lang') === 'bn' ? 'সাইজ বা ওজন নির্বাচন করুন' : 'Select a size or weight');
+		}
+		if(selectionLabel){
+			selectionLabel.textContent = itemSelectionLabel(item);
+			selectionLabel.hidden = !selectionLabel.textContent;
+		}
+	});
+	const summaryTotal = el.querySelector('.cart-summary strong');
+	if(summaryTotal) summaryTotal.textContent = `৳${formatMoney(total)}`;
+	updateCheckoutAvailability();
+}
+
+function createSelectionControls(item,index){
+	const group = document.createElement('fieldset');
+	group.className = 'cart-selection-group';
+	const legend = document.createElement('legend');
+	const isBangla = localStorage.getItem('lang') === 'bn';
+	const isSize = item.selectionType === 'size';
+	legend.textContent = isSize ? (isBangla ? 'সাইজ নির্বাচন করুন' : 'Choose a size') : (isBangla ? 'ওজন নির্বাচন করুন' : 'Choose weight');
+	group.appendChild(legend);
+
+	if(isSize){
+		const options = document.createElement('div');
+		options.className = 'cart-option-chips';
+		availableSizes(item).forEach(size=>{
+			const label = document.createElement('label');
+			label.className = 'cart-option-chip';
+			const radio = document.createElement('input');
+			radio.type = 'radio';
+			radio.name = `cart-size-${index}`;
+			radio.value = size;
+			radio.checked = item.selection?.type === 'size'
+				&& typeof item.selection.value === 'string'
+				&& item.selection.value.trim().toLocaleLowerCase() === size.toLocaleLowerCase();
+			radio.setAttribute('aria-label',size);
+			radio.addEventListener('change',()=>setCartSelection(index,{type:'size',value:size}));
+			const text = document.createElement('span');
+			text.textContent = size;
+			label.append(radio,text);
+			options.appendChild(label);
+		});
+		group.appendChild(options);
+		return group;
+	}
+
+	const configuredWeightOptions = getCatalogWeightOptions(item);
+	if(configuredWeightOptions.length){
+		const options = document.createElement('div');
+		options.className = 'cart-option-chips';
+		configuredWeightOptions.forEach(option=>{
+			const label = document.createElement('label');
+			label.className = 'cart-option-chip';
+			const radio = document.createElement('input');
+			radio.type = 'radio';
+			radio.name = `cart-weight-option-${index}`;
+			radio.value = `${option.amount}:${option.unit}`;
+			radio.checked = item.selection?.type === 'weight'
+				&& Number(item.selection.amount) === option.amount
+				&& item.selection.unit === option.unit;
+			radio.setAttribute('aria-label',`${option.amount} ${option.unit}`);
+			radio.addEventListener('change',()=>setCartSelection(index,{type:'weight',amount:option.amount,unit:option.unit}));
+			const text = document.createElement('span');
+			text.textContent = `${option.amount} ${option.unit}`;
+			label.append(radio,text);
+			options.appendChild(label);
+		});
+		group.appendChild(options);
+		return group;
+	}
+
+	const amountLabel = document.createElement('label');
+	amountLabel.className = 'cart-weight-label';
+	amountLabel.textContent = isBangla ? 'পরিমাণ' : 'Amount';
+	const amount = document.createElement('input');
+	amount.type = 'number';
+	amount.className = 'cart-weight-amount';
+	amount.min = '0.001';
+	amount.step = 'any';
+	amount.inputMode = 'decimal';
+	amount.value = item.selection?.type === 'weight' ? String(item.selection.amount) : '';
+	amountLabel.appendChild(amount);
+	group.appendChild(amountLabel);
+
+	const units = document.createElement('div');
+	units.className = 'cart-option-chips';
+	const unitInputs = [];
+	availableWeightUnits(item).forEach((unit,unitIndex)=>{
+		const label = document.createElement('label');
+		label.className = 'cart-option-chip';
+		const radio = document.createElement('input');
+		radio.type = 'radio';
+		radio.name = `cart-unit-${index}`;
+		radio.value = unit;
+		radio.checked = item.selection?.type === 'weight'
+			? item.selection.unit === unit
+			: unitIndex === 0;
+		radio.setAttribute('aria-label',unit);
+		const text = document.createElement('span');
+		text.textContent = unit;
+		label.append(radio,text);
+		units.appendChild(label);
+		unitInputs.push(radio);
+	});
+	group.appendChild(units);
+
+	const getWeightSelection = ()=>{
+		const amountValue = amount.valueAsNumber;
+		const unit = unitInputs.find(radio=>radio.checked)?.value;
+		return Number.isFinite(amountValue) && amountValue >= Number(amount.min) && unit
+			? {type:'weight',amount:amountValue,unit}
+			: null;
+	};
+	amount.addEventListener('input',()=>{
+		item.selection = getWeightSelection();
+		saveCart();
+		refreshCartPrices();
+	});
+	amount.addEventListener('change',()=>setCartSelection(index,getWeightSelection()));
+	unitInputs.forEach(radio=>radio.addEventListener('change',()=>setCartSelection(index,getWeightSelection())));
+	return group;
 }
 
 if(Array.isArray(storedCart)){
@@ -110,13 +453,20 @@ function saveCart(){
 async function loadBusinessSettings(){
 	if(!db){
 		checkoutSettingsReady = true;
-		checkoutBtn.disabled = cart.length === 0;
+		updateCheckoutAvailability();
 		return;
 	}
 	try{
 		const settings = await getDoc(doc(db,'config','site'));
 		if(!settings.exists()) return;
 		const data = settings.data();
+		siteSettings = {
+			...data,
+			deliveryChargeDhaka:Number(data.deliveryChargeDhaka) || 0,
+			deliveryChargeOutside:Number(data.deliveryChargeOutside) || 0
+		};
+		localStorage.setItem('deliveryChargeDhaka',String(siteSettings.deliveryChargeDhaka));
+		localStorage.setItem('deliveryChargeOutside',String(siteSettings.deliveryChargeOutside));
 		if(data.restaurantName){
 			localStorage.setItem('restaurantName', data.restaurantName);
 			updateRestaurantName(data.restaurantName);
@@ -126,42 +476,61 @@ async function loadBusinessSettings(){
 			localStorage.setItem('siteWhatsApp', data.whatsapp);
 		}
 		if(data.buttonColor) applyButtonColor(data.buttonColor);
-		applyCheckoutLocation(data);
 	}catch(error){
 		console.error('Business settings could not be loaded for checkout:', error);
 	}finally{
 		checkoutSettingsReady = true;
-		checkoutBtn.disabled = cart.length === 0;
+		renderCart();
+		updateCheckoutAvailability();
 	}
 }
 
-const businessSettingsPromise = loadBusinessSettings();
+void loadBusinessSettings();
 
 function itemPrice(item){
-	const savedPrice = Number(item.price);
-	const price = Number.isFinite(savedPrice) ? Math.max(0,savedPrice) : 0;
-	const savedDiscount = Number(item.discount);
-	const discount = Number.isFinite(savedDiscount) ? Math.min(100,Math.max(0,savedDiscount)) : 0;
-	return price - price * discount / 100;
+	return getCatalogUnitPrice(item);
+}
+
+function itemSelectionLabel(item){
+	return getCatalogSelectionLabel(item.selection,localStorage.getItem('lang') === 'bn');
+}
+
+function formatMoney(amount){
+	return Number(amount).toLocaleString(localStorage.getItem('lang') === 'bn' ? 'bn-BD' : 'en-BD',{maximumFractionDigits:2});
+}
+
+function cartSubtotal(){
+	return cart.reduce((sum,item)=>{
+		if(['size','weight'].includes(item.selectionType) && !selectionIsValid(item)) return sum;
+		return sum + itemPrice(item) * item.quantity;
+	},0);
+}
+
+function selectedDeliveryCharge(){
+	const district = bangladeshDistricts.find(item=>item.id === districtSelect.value);
+	return getDeliveryCharge(siteSettings,district);
 }
 
 function renderCart(){
-	let total = 0;
+	const subtotal = cartSubtotal();
+	const deliveryCharge = selectedDeliveryCharge();
+	const hasSelectedDistrict = Boolean(districtSelect.value);
+	const total = subtotal + (hasSelectedDistrict ? deliveryCharge : 0);
 	const itemCount = cart.reduce((sum,item)=>sum + item.quantity,0);
 	if(cartItemsCount) cartItemsCount.textContent = `${itemCount} ${itemCount === 1 ? 'item' : 'items'}`;
 	if(!cart.length){
 		el.innerHTML = '<div class="cart-empty"><span class="cart-empty-icon" aria-hidden="true">&#128722;</span><h3>Your cart is empty</h3><p>Choose an item from the catalog to get started.</p><a class="cart-empty-link" href="index.html">Browse the catalog <span aria-hidden="true">&#8594;</span></a></div>';
 		el.querySelector('.cart-empty-link').href = catalogUrl.href;
-		checkoutBtn.disabled = true;
+		updateCheckoutAvailability();
 		return;
 	}
 	el.replaceChildren();
 	const list = document.createElement('div');
 	list.className = 'cart-list';
 	cart.forEach((item,index)=>{
+		const selectionValid = selectionIsValid(item);
 		const unitPrice = itemPrice(item);
 		const lineTotal = unitPrice * item.quantity;
-		total += lineTotal;
 		const row = document.createElement('article');
 		row.className = 'cart-item';
 		row.dataset.index = String(index);
@@ -185,13 +554,28 @@ function renderCart(){
 		const title = document.createElement('h2');
 		title.className = 'cart-item-title';
 		title.textContent = item.name || 'Product';
+		details.appendChild(title);
+		const selectionLabel = itemSelectionLabel(item);
+		const selection = document.createElement('p');
+		selection.className = 'cart-item-selection';
+		selection.dataset.cartSelection = String(index);
+		selection.textContent = selectionLabel;
+		selection.hidden = !selectionLabel;
+		details.appendChild(selection);
+		if(['size','weight'].includes(item.selectionType)) details.appendChild(createSelectionControls(item,index));
 		const price = document.createElement('p');
 		price.className = 'cart-item-price';
-		price.textContent = `৳${unitPrice} each`;
+		price.textContent = item.selectionType === 'weight' && !selectionValid
+			? `৳${formatMoney(getCatalogUnitPrice({...item,selection:null}))} / kg`
+			: `৳${formatMoney(unitPrice)} each`;
+		price.dataset.cartPrice = String(index);
 		const itemTotal = document.createElement('p');
 		itemTotal.className = 'cart-item-line-total';
-		itemTotal.textContent = `৳${lineTotal}`;
-		details.append(title,price,itemTotal);
+		itemTotal.textContent = ['size','weight'].includes(item.selectionType) && !selectionIsValid(item)
+			? (localStorage.getItem('lang') === 'bn' ? 'সাইজ বা ওজন নির্বাচন করুন' : 'Select a size or weight')
+			: `৳${formatMoney(lineTotal)}`;
+		itemTotal.dataset.cartTotal = String(index);
+		details.append(price,itemTotal);
 
 		const controls = document.createElement('div');
 		controls.className = 'cart-item-controls';
@@ -228,13 +612,28 @@ function renderCart(){
 	el.appendChild(list);
 	const summary = document.createElement('div');
 	summary.className = 'cart-summary';
-	const summaryLabel = document.createElement('span');
-	summaryLabel.textContent = 'Total';
-	const summaryTotal = document.createElement('strong');
-	summaryTotal.textContent = `৳${total}`;
-	summary.append(summaryLabel,summaryTotal);
+	const makeSummaryRow = (className,labelText,valueText)=>{
+		const row = document.createElement('div');
+		row.className = `cart-summary-row ${className}`;
+		const label = document.createElement('span');
+		label.textContent = labelText;
+		const value = document.createElement('strong');
+		value.textContent = valueText;
+		row.append(label,value);
+		return row;
+	};
+	const isBangla = localStorage.getItem('lang') === 'bn';
+	summary.appendChild(makeSummaryRow('cart-subtotal',isBangla ? 'পণ্যের মোট' : 'Subtotal',`৳${formatMoney(subtotal)}`));
+	const deliveryRow = makeSummaryRow(
+		'cart-delivery-charge',
+		isBangla ? 'ডেলিভারি চার্জ' : 'Delivery charge',
+		hasSelectedDistrict ? `৳${formatMoney(deliveryCharge)}` : (isBangla ? 'জেলা নির্বাচন করুন' : 'Select district')
+	);
+	deliveryRow.hidden = !hasSelectedDistrict;
+	summary.appendChild(deliveryRow);
+	summary.appendChild(makeSummaryRow('cart-grand-total',isBangla ? 'সর্বমোট' : 'Total',`৳${formatMoney(total)}`));
 	el.appendChild(summary);
-	checkoutBtn.disabled = !checkoutSettingsReady;
+	updateCheckoutAvailability();
 }
 
 el.addEventListener('click',(event)=>{
@@ -253,93 +652,67 @@ el.addEventListener('click',(event)=>{
 renderCart();
 saveCart();
 
-checkoutBtn.addEventListener('click', async ()=>{
-	tableNumberInput.value = tableNumberInput.value.trim();
-	if(!tableNumberInput.value){
-		tableNumberInput.setAttribute('aria-invalid','true');
-		const isRoom = checkoutLocationType === 'room';
-		tableNumberInput.setCustomValidity(localStorage.getItem('lang') === 'bn'
-			? (isRoom ? 'আপনার রুম নম্বর লিখুন।' : 'আপনার টেবিল নম্বর লিখুন।')
-			: `Please enter your ${isRoom ? 'room' : 'table'} number.`);
-		tableNumberInput.reportValidity();
-		tableNumberInput.focus();
+checkoutForm.addEventListener('submit',async event=>{
+	event.preventDefault();
+	checkoutError.textContent = '';
+	if(cart.some(item=>!selectionIsValid(item))){
+		checkoutError.textContent = localStorage.getItem('lang') === 'bn'
+			? 'অর্ডার করার আগে কার্টের প্রতিটি পণ্যের সাইজ বা ওজন নির্বাচন করুন।'
+			: 'Choose a size or weight for every product before checkout.';
 		return;
 	}
-	const enteredNumber = Number(tableNumberInput.value);
-	if(!Number.isInteger(enteredNumber) || enteredNumber < 1 || enteredNumber > checkoutLocationCount){
-		tableNumberInput.setAttribute('aria-invalid','true');
-		tableNumberInput.setCustomValidity(localStorage.getItem('lang') === 'bn'
-			? `নম্বরটি ১ থেকে ${checkoutLocationCount}-এর মধ্যে হতে হবে।`
-			: `Enter a number from 1 to ${checkoutLocationCount}.`);
-		tableNumberInput.reportValidity();
-		tableNumberInput.focus();
+	if(!customerNameInput.reportValidity() || !customerPhoneInput.reportValidity() || !customerAddressInput.reportValidity()) return;
+	if(!districtSelect.value){
+		checkoutError.textContent = localStorage.getItem('lang') === 'bn' ? 'জেলা নির্বাচন করুন।' : 'Select a district.';
+		openLocationDropdown(districtWidget,districtPanel,districtTrigger,districtSearch,renderDistrictOptions);
 		return;
 	}
-	tableNumberInput.removeAttribute('aria-invalid');
-	tableNumberInput.setCustomValidity('');
-	checkoutBtn.disabled = true;
-	try{
-		await sendWhatsApp();
-	}finally{
-		checkoutBtn.disabled = cart.length === 0;
+	if(!upazilaSelect.value){
+		checkoutError.textContent = localStorage.getItem('lang') === 'bn' ? 'উপজেলা নির্বাচন করুন।' : 'Select an upazila.';
+		openLocationDropdown(upazilaWidget,upazilaPanel,upazilaTrigger,upazilaSearch,renderUpazilaOptions);
+		return;
 	}
-});
-
-tableNumberInput.addEventListener('input',()=>{
-	tableNumberInput.setCustomValidity('');
-	const value = Number(tableNumberInput.value);
-	if(Number.isInteger(value) && value >= 1 && value <= checkoutLocationCount) tableNumberInput.removeAttribute('aria-invalid');
-});
-
-function buildMessage(lang='en'){
-	const lines = [];
-	const restaurantName = localStorage.getItem('restaurantName') || 'Your Business';
-	if(lang === 'bn') {
-		lines.push(`${restaurantName} - নতুন অর্ডার`);
-		lines.push(`${checkoutLocationType === 'room' ? 'রুম' : 'টেবিল'} নম্বর: ${tableNumberInput.value.trim()}`);
-	} else {
-		lines.push(`${restaurantName} - New order`);
-		lines.push(`${checkoutLocationType === 'room' ? 'Room' : 'Table'} No: ${tableNumberInput.value.trim()}`);
+	if(!checkoutForm.reportValidity()) return;
+	if(!cart.length) return;
+	const isBangla = localStorage.getItem('lang') === 'bn';
+	const number = (localStorage.getItem('whatsappNumber') || localStorage.getItem('siteWhatsApp') || '').replace(/\D/g,'');
+	if(number.length < 7){
+		checkoutError.textContent = isBangla
+			? 'দোকানের WhatsApp নম্বর সেট করা নেই। Admin-এর WhatsApp পাতায় নম্বর যোগ করুন।'
+			: 'The store WhatsApp number is missing. Add it in Admin → WhatsApp.';
+		return;
 	}
-	lines.push('');
-	let sum = 0;
-	cart.forEach((item, index) => {
-		const name = item.bnName && lang === 'bn' ? item.bnName : item.name;
+
+	const customer = {
+		name:customerNameInput.value.trim(),
+		phone:customerPhoneInput.value.trim(),
+		district:districtSelect.selectedOptions[0]?.textContent || '',
+		upazila:upazilaSelect.selectedOptions[0]?.textContent || '',
+		address:customerAddressInput.value.trim()
+	};
+	const businessName = localStorage.getItem('restaurantName') || 'Your Business';
+	const lines = isBangla
+		? [`${businessName} - নতুন ডেলিভারি অর্ডার`,`নাম: ${customer.name}`,`ফোন: ${customer.phone}`,`জেলা: ${customer.district}`,`উপজেলা: ${customer.upazila}`,`ঠিকানা: ${customer.address}`,'','অর্ডার:']
+		: [`${businessName} - New delivery order`,`Name: ${customer.name}`,`Phone: ${customer.phone}`,`District: ${customer.district}`,`Upazila: ${customer.upazila}`,`Address: ${customer.address}`,'','Items:'];
+	const subtotal = cartSubtotal();
+	const deliveryCharge = selectedDeliveryCharge();
+	const total = subtotal + deliveryCharge;
+	cart.forEach((item,index)=>{
+		const itemName = isBangla && item.bnName ? item.bnName : item.name || 'Product';
 		const lineTotal = itemPrice(item) * item.quantity;
-		lines.push(`${index + 1}. ${item.quantity} x ${name} — ৳${lineTotal}`);
-		sum += lineTotal;
+		const selectionLabel = itemSelectionLabel(item);
+		lines.push(`${index + 1}. ${item.quantity} × ${itemName}${selectionLabel ? ` (${selectionLabel})` : ''} - ৳${formatMoney(lineTotal)}`);
 	});
-	lines.push('');
-	lines.push(lang === 'bn' ? `মোট: ৳${sum}` : `Total: ৳${sum}`);
-	return lines.join('\n');
-}
-
-async function sendWhatsApp(){
-	const popup = window.open('about:blank', '_blank');
-	await businessSettingsPromise;
-	const number = localStorage.getItem('whatsappNumber') || localStorage.getItem('siteWhatsApp') || '';
-	if(!number){
-		if(popup) popup.close();
-		alert('WhatsApp number not set for this business.');
-		return;
-	}
-	const lang = localStorage.getItem('lang') || 'en';
-	const msg = buildMessage(lang);
-	const encoded = encodeURIComponent(msg);
-	const clean = number.replace(/\D/g, '');
-	if(clean.length < 7){
-		if(popup) popup.close();
-		alert('The saved WhatsApp number is invalid. Update it in the admin settings.');
-		return;
-	}
-	const waUrl = `https://wa.me/${clean}?text=${encoded}`;
-	if(popup){
-		popup.opener = null;
-		popup.location.href = waUrl;
+	lines.push('',isBangla ? `পণ্যের মোট: ৳${formatMoney(subtotal)}` : `Subtotal: ৳${formatMoney(subtotal)}`);
+	lines.push(isBangla ? `ডেলিভারি চার্জ: ৳${formatMoney(deliveryCharge)}` : `Delivery charge: ৳${formatMoney(deliveryCharge)}`);
+	lines.push('',isBangla ? `মোট: ৳${formatMoney(total)}` : `Total: ৳${formatMoney(total)}`);
+	lines.push(isBangla ? 'পেমেন্ট: ক্যাশ অন ডেলিভারি' : 'Payment: Cash on delivery');
+	const whatsappUrl = `https://wa.me/${number}?text=${encodeURIComponent(lines.join('\n'))}`;
+	const whatsappWindow = window.open(whatsappUrl,'_blank');
+	if(whatsappWindow){
+		whatsappWindow.opener = null;
+		checkoutBtn.textContent = isBangla ? 'হোয়াটসঅ্যাপে বার্তা খুলেছে' : 'WhatsApp message opened';
 	}else{
-		window.location.assign(waUrl);
-		return;
+		window.location.assign(whatsappUrl);
 	}
-	try { localStorage.removeItem('cart'); } catch (e) {}
-	location.href = catalogUrl.href;
-}
+});

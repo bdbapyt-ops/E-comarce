@@ -6,25 +6,11 @@ import express from 'express';
 import { applicationDefault, cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { createCloudinarySignature, isCloudinaryPublicIdInFolder } from './server/cloudinary-signature.js';
+import { getFirebaseWebConfig } from './server/firebase-web-config.js';
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = Number(process.env.PORT) || 8000;
-
-function getFirebaseWebConfig(){
-	const config = {
-		apiKey: process.env.FIREBASE_API_KEY,
-		authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-		projectId: process.env.FIREBASE_PROJECT_ID,
-		storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-		messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-		appId: process.env.FIREBASE_APP_ID,
-		measurementId: process.env.FIREBASE_MEASUREMENT_ID
-	};
-	const missing = Object.entries(config).filter(([,value])=>!value).map(([key])=>key);
-	if(missing.length) throw new Error(`Missing Firebase configuration: ${missing.join(', ')}`);
-	return config;
-}
 
 function getAdminUidAllowlist(){
 	return new Set((process.env.FIREBASE_ADMIN_UIDS || '').split(',').map(uid=>uid.trim()).filter(Boolean));
@@ -34,7 +20,7 @@ function getPrimaryAdminUid(){
 	return process.env.FIREBASE_PRIMARY_ADMIN_UID || '';
 }
 
-function getAdminAuth(){
+function getFirebaseAdminApp(){
 	const projectId = process.env.FIREBASE_PROJECT_ID;
 	if(!projectId) throw new Error('FIREBASE_PROJECT_ID is not configured.');
 	let credential = applicationDefault();
@@ -50,9 +36,12 @@ function getAdminAuth(){
 		}
 		credential = cert(serviceAccount);
 	}
-	const adminApp = getApps().find(existingApp=>existingApp.options.projectId === projectId)
+	return getApps().find(existingApp=>existingApp.options.projectId === projectId)
 		|| initializeApp({credential,projectId});
-	return getAuth(adminApp);
+}
+
+function getAdminAuth(){
+	return getAuth(getFirebaseAdminApp());
 }
 
 function isAdminUser(user){
@@ -116,7 +105,7 @@ app.get('/healthz',(_request,response)=>{
 app.get('/api/config', (_request,response)=>{
 	try{
 		response.set('Cache-Control','no-store');
-		response.json({firebase:getFirebaseWebConfig()});
+		response.json({firebase:getFirebaseWebConfig(process.env)});
 	}catch(error){
 		console.error('Public Firebase configuration is incomplete:',error.message);
 		response.status(503).json({error:'Firebase configuration is incomplete on the server.'});
@@ -129,9 +118,10 @@ app.get('/shared/firebase-config.js', (_request,response)=>{
 			'Cache-Control':'public, max-age=300, stale-while-revalidate=3600',
 			'Content-Type':'text/javascript; charset=utf-8'
 		});
-		response.send(`export const firebaseConfig = ${JSON.stringify(getFirebaseWebConfig())};`);
+		response.send(`export const firebaseConfig = ${JSON.stringify(getFirebaseWebConfig(process.env))};`);
 	}catch(error){
 		console.error('Public Firebase configuration is incomplete:',error.message);
+		response.set('Cache-Control','no-store');
 		response.status(503).type('text').send('throw new Error("Firebase configuration is incomplete on the server.");');
 	}
 });

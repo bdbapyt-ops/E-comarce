@@ -1,4 +1,4 @@
-import { db } from '../../shared/firebase.js';
+import { db } from '../../shared/firebase.js?v=2';
 import { doc, getDoc, setDoc } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 const input = document.getElementById('whatsapp');

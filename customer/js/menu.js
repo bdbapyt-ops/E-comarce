@@ -1,5 +1,6 @@
 import {getUrlParams} from './restaurant.js';
-import { db } from '../../shared/firebase.js';
+import { db } from '../../shared/firebase.js?v=2';
+import { getCatalogSelectionKey, getCatalogUnitPrice } from '../../shared/catalog-options.js?v=2';
 import { doc, onSnapshot, collection } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js';
 
 let categoriesData = [];
@@ -161,8 +162,8 @@ if(db){
 
 // Translations
 const translations = {
-	en: { title: 'Browse catalog', categories: 'Categories', all: 'All', home: 'Home', popular: 'Popular', new: 'New', deals: 'Deals', quickNav: 'Quick menu filters', add: 'Add', decrease: 'Decrease', increase: 'Increase', viewCart: 'View cart', item: 'item', items: 'items', itemCountOne: 'item', itemCountMany: 'items', noItems: 'No items match this filter yet.', pricePrefix: '৳' },
-	bn: { title: 'ক্যাটালগ দেখুন', categories: 'ক্যাটাগরি', all: 'সব', home: 'হোম', popular: 'জনপ্রিয়', new: 'নতুন', deals: 'ছাড়', quickNav: 'দ্রুত মেনু ফিল্টার', add: 'যোগ করুন', decrease: 'কম', increase: 'বাড়ান', viewCart: 'কার্ট দেখুন', item: 'টি আইটেম', items: 'টি আইটেম', itemCountOne: 'টি আইটেম', itemCountMany: 'টি আইটেম', noItems: 'এই ফিল্টারে কোনো আইটেম নেই।', pricePrefix: '৳' }
+	en: { title: 'Browse catalog', categories: 'Categories', all: 'All', home: 'Home', popular: 'Popular', new: 'New', deals: 'Deals', quickNav: 'Quick menu filters', add: 'Add', buy: 'BUY', size: 'Choose size', weight: 'Enter weight', amount: 'Amount', decrease: 'Decrease', increase: 'Increase', viewCart: 'View cart', item: 'item', items: 'items', itemCountOne: 'item', itemCountMany: 'items', noItems: 'No items match this filter yet.', pricePrefix: '৳', perKg: '/ kg' },
+	bn: { title: 'ক্যাটালগ দেখুন', categories: 'ক্যাটাগরি', all: 'সব', home: 'হোম', popular: 'জনপ্রিয়', new: 'নতুন', deals: 'ছাড়', quickNav: 'দ্রুত মেনু ফিল্টার', add: 'যোগ করুন', buy: 'কিনুন', size: 'সাইজ বাছুন', weight: 'ওজন লিখুন', amount: 'পরিমাণ', decrease: 'কম', increase: 'বাড়ান', viewCart: 'কার্ট দেখুন', item: 'টি আইটেম', items: 'টি আইটেম', itemCountOne: 'টি আইটেম', itemCountMany: 'টি আইটেম', noItems: 'এই ফিল্টারে কোনো আইটেম নেই।', pricePrefix: '৳', perKg: '/ কেজি' }
 };
 
 let lang = localStorage.getItem('lang') || 'en';
@@ -190,7 +191,7 @@ function getCloudinaryImageUrl(url, transformation){
 function getMenuImageSrcset(url){
 	if(!url || !url.includes('res.cloudinary.com/')) return '';
 	return [240,360,480,720,960].map(width=>
-		`${getCloudinaryImageUrl(url,`f_auto,q_auto:good,c_fill,g_auto,w_${width},h_${width}`)} ${width}w`
+		`${getCloudinaryImageUrl(url,`f_auto,q_auto:good,c_fill,g_center,w_${width},h_${width}`)} ${width}w`
 	).join(', ');
 }
 
@@ -230,7 +231,8 @@ function readCart(){
 }
 
 function matchesCartItem(entry,item){
-	return item.id && entry.id ? entry.id === item.id : entry.name === item.name && entry.category === item.category;
+	const sameProduct = item.id && entry.id ? entry.id === item.id : entry.name === item.name && entry.category === item.category;
+	return sameProduct && getCatalogSelectionKey(entry.selection) === getCatalogSelectionKey(item.selection);
 }
 
 function getCartQuantity(item){
@@ -292,6 +294,7 @@ function ensureItemDetailModal(){
 				</div>
 				<h3 id="item-detail-title"></h3>
 				<p id="item-detail-description"></p>
+				<div id="item-detail-options" class="item-detail-options"></div>
 				<div id="item-detail-extra" class="item-detail-extra"></div>
 				<button type="button" id="item-detail-add" class="item-detail-add">${translations[lang].add}</button>
 			</div>
@@ -346,6 +349,7 @@ function openItemDetailModal(itemId){
 	const priceEl = document.getElementById('item-detail-price');
 	const addBtn = document.getElementById('item-detail-add');
 	const extraEl = document.getElementById('item-detail-extra');
+	const selectionType = ['size','weight'].includes(item.selectionType) ? item.selectionType : 'none';
 	const discount = Number(item.discount || 0);
 	const finalPrice = discount > 0 ? Math.max(0, Number(item.price || 0) - (Number(item.price || 0) * discount) / 100) : Number(item.price || 0);
 	let activeIndex = 0;
@@ -364,9 +368,10 @@ function openItemDetailModal(itemId){
 	previousImage.onclick = ()=>showImage(activeIndex - 1);
 	nextImage.onclick = ()=>showImage(activeIndex + 1);
 	categoryEl.textContent = item.category || 'Item';
-	priceEl.textContent = `${translations[lang].pricePrefix}${finalPrice}`;
+	priceEl.textContent = `${translations[lang].pricePrefix}${finalPrice}${selectionType === 'weight' ? translations[lang].perKg : ''}`;
 	titleEl.textContent = title;
 	descriptionEl.textContent = item.description || 'No description available.';
+	document.getElementById('item-detail-options').replaceChildren();
 	if(item.ingredients && item.ingredients.length) {
 		const label = document.createElement('strong');
 		label.textContent = 'Ingredients: ';
@@ -378,11 +383,8 @@ function openItemDetailModal(itemId){
 	} else {
 		extraEl.innerHTML = '';
 	}
-	addBtn.onclick = () => {
-		addToCart(item.id || itemId);
-		modal.classList.add('hidden');
-		modal.setAttribute('aria-hidden', 'true');
-	};
+	addBtn.textContent = translations[lang].buy;
+	addBtn.onclick = () => buyNow(item.id || itemId);
 	thumbs.innerHTML = imageUrls.map((url, index) => {
 		const thumbnail = getCloudinaryImageUrl(url,'f_auto,q_auto:good,c_fill,g_auto,w_96,h_96');
 		return `<button type="button" class="item-detail-thumb${index === activeIndex ? ' active' : ''}" data-index="${index}" aria-label="View image ${index + 1}" aria-pressed="${index === activeIndex}"><img src="${escapeHTML(thumbnail)}" alt=""></button>`;
@@ -429,7 +431,7 @@ function renderMenu(){
 		const title = escapeHTML((lang==='bn' && x.bnName) ? x.bnName : x.name);
 		const originalImageUrl = optimizeImageUrl((x.images && x.images[0] && x.images[0].url) ? x.images[0].url : x.image)
 			|| '../assets/images/food/placeholder.svg';
-		const imageUrl = getCloudinaryImageUrl(originalImageUrl,'f_auto,q_auto:good,c_fill,g_auto,w_480,h_480');
+		const imageUrl = getCloudinaryImageUrl(originalImageUrl,'f_auto,q_auto:good,c_fill,g_center,w_480,h_480');
 		const img = escapeHTML(imageUrl);
 		const imageSrcset = escapeHTML(getMenuImageSrcset(originalImageUrl));
 		const discount = Number(x.discount || 0);
@@ -439,17 +441,24 @@ function renderMenu(){
 		const quantity = getCartQuantity(x);
 		const imageLoading = i < 2 ? 'eager' : 'lazy';
 		const imagePriority = i === 0 ? ' fetchpriority="high"' : '';
-		const actions = quantity
+		const selectionType = ['size','weight'].includes(x.selectionType) ? x.selectionType : 'none';
+		const actions = selectionType !== 'none'
+			? `<button type="button" class="add-to-cart-btn" data-item-id="${itemId}" aria-label="${translations[lang].buy}: ${title}">${translations[lang].buy}</button>`
+			: quantity
 			? `<div class="card-quantity-controls" aria-label="${title} quantity"><button type="button" data-cart-delta="-1" data-item-id="${itemId}" aria-label="${translations[lang].decrease} ${title}">−</button><span aria-live="polite">${quantity}</span><button type="button" data-cart-delta="1" data-item-id="${itemId}" aria-label="${translations[lang].increase} ${title}">+</button></div>`
 			: `<button type="button" class="add-to-cart-btn" data-item-id="${itemId}" aria-label="${translations[lang].add} ${title}">+ ${translations[lang].add}</button>`;
-		return `<article class="food-card"><button type="button" class="food-card-media item-detail-trigger" data-item-id="${itemId}" aria-label="View details for ${title}"><img src="${img}"${imageSrcset ? ` srcset="${imageSrcset}" sizes="120px"` : ''} alt="${title}" loading="${imageLoading}"${imagePriority} decoding="async"></button><div class="food-card-body"><h3>${title}</h3>${description ? `<p class="food-description">${description}</p>` : ''}<div class="food-price-row"><span class="food-price">${translations[lang].pricePrefix}${finalPrice}</span>${discount > 0 ? `<span class="food-discount">-${discount}%</span>` : ''}</div><div class="food-card-actions">${actions}</div></div></article>`;
+		return `<article class="food-card"><button type="button" class="food-card-media item-detail-trigger" data-item-id="${itemId}" aria-label="View details for ${title}"><img src="${img}"${imageSrcset ? ` srcset="${imageSrcset}" sizes="(max-width: 600px) 50vw, 120px"` : ''} alt="${title}" loading="${imageLoading}"${imagePriority} decoding="async"></button><div class="food-card-body"><h3>${title}</h3>${description ? `<p class="food-description">${description}</p>` : ''}<div class="food-price-row"><span class="food-price">${translations[lang].pricePrefix}${finalPrice}${selectionType === 'weight' ? translations[lang].perKg : ''}</span>${discount > 0 ? `<span class="food-discount">-${discount}%</span>` : ''}</div><div class="food-card-actions">${actions}</div></div></article>`;
 	}).join('');
 
 	m.querySelectorAll('.item-detail-trigger').forEach((button) => {
 		button.addEventListener('click', () => openItemDetailModal(button.dataset.itemId));
 	});
 	m.querySelectorAll('.add-to-cart-btn').forEach((button) => {
-		button.addEventListener('click', () => addToCart(button.dataset.itemId));
+		button.addEventListener('click', () => {
+			const item = itemsData.find(entry=>String(entry.id) === String(button.dataset.itemId));
+			if(item && ['size','weight'].includes(item.selectionType)) buyNow(button.dataset.itemId);
+			else addToCart(button.dataset.itemId);
+		});
 	});
 	m.querySelectorAll('[data-cart-delta]').forEach((button) => {
 		button.addEventListener('click', () => adjustCartQuantity(button.dataset.itemId,Number(button.dataset.cartDelta)));
@@ -466,19 +475,25 @@ function setQuickFilter(value){
 	renderMenu();
 }
 
-window.addToCart = (key) => {
+window.addToCart = (key,selection=null) => {
 	const cart = readCart();
 	let item = null;
 	if(typeof key === 'string') item = itemsData.find(it=>it.id===key) || itemsData[Number(key)];
 	else item = itemsData[key];
 	if(!item) return alert('Item not found');
-	const existing = cart.find(entry=>matchesCartItem(entry,item));
+	const cartItem = {...item,selection};
+	const existing = cart.find(entry=>matchesCartItem(entry,cartItem));
 	if(existing) existing.quantity = (Number(existing.quantity) || 1) + 1;
-	else cart.push({...item, quantity: 1});
+	else cart.push({...cartItem, quantity: 1});
 	localStorage.setItem('cart', JSON.stringify(cart));
 	updateCartCount();
 	renderMenu();
 };
+
+function buyNow(key){
+	window.addToCart(key);
+	location.assign(cartUrl.href);
+}
 
 function applyLang(){
 	const brandTitle = document.getElementById('restaurantName');
@@ -513,12 +528,8 @@ function updateCartCount(){
 		const badge = document.getElementById('cart-count');
 		const bottomBadge = document.getElementById('bottom-cart-count');
 		const count = cart.reduce((total,item)=>total + (Number(item.quantity) || 1),0);
-		const subtotal = cart.reduce((total,item)=>{
-			const price = Number(item.price) || 0;
-			const discount = Number(item.discount) || 0;
-			const finalPrice = discount > 0 ? Math.max(0,price - price * discount / 100) : price;
-			return total + finalPrice * (Number(item.quantity) || 1);
-		},0);
+		const subtotal = cart.reduce((total,item)=>
+			total + (item.selectionType === 'weight' && getCatalogSelectionKey(item.selection) === 'none' ? 0 : getCatalogUnitPrice(item) * (Number(item.quantity) || 1)),0);
 		if(badge) badge.innerText = String(count);
 		if(bottomBadge){ bottomBadge.innerText = String(count); bottomBadge.hidden = count === 0; }
 		if(confirmOrder){

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/admin.css?v=8">
+  <link rel="stylesheet" href="css/admin.css?v=12">
 </head>
 <body>
   <aside>
@@ -17,7 +17,6 @@
       <a href="dashboard.html">Dashboard</a>
       <a href="categories.html">Categories</a>
       <a href="items.html" class="active">Catalog Items</a>
-      <a href="tables.html">Tables</a>
       <a href="whatsapp.html">WhatsApp</a>
       <a href="settings.html">Settings</a>
     </nav>
@@ -58,6 +57,36 @@
             <label>Discount (%)</label>
             <input id="item-discount" type="number" min="0" max="100" step="1" placeholder="0">
           </div>
+          <fieldset class="field-group selection-type-field">
+            <legend>Product options</legend>
+            <div class="selection-type-options">
+              <label class="radio-option"><input type="radio" name="item-selection-type" value="none" checked> No options</label>
+              <label class="radio-option"><input type="radio" name="item-selection-type" value="size"> Size / variant</label>
+              <label class="radio-option"><input type="radio" name="item-selection-type" value="weight"> Weight</label>
+            </div>
+          </fieldset>
+          <div id="size-options-field" class="field-group product-option-config" hidden>
+            <label for="item-size-options">Available sizes / variants</label>
+            <input id="item-size-options" type="text" maxlength="620" placeholder="e.g. 38, 39, 40, 41 or XS, S, M, L, XL">
+            <small>Use shoe sizes (38, 39, 40) or clothing sizes (XS, S, M, L). Separate up to 20 options with commas; all use the item price.</small>
+          </div>
+          <fieldset id="weight-units-field" class="field-group product-option-config" hidden>
+            <legend>Available weight options</legend>
+            <div class="weight-option-builder">
+              <label for="item-weight-amount">Weight amount</label>
+              <div class="weight-option-input-row">
+                <input id="item-weight-amount" type="number" min="0.001" step="any" inputmode="decimal" placeholder="e.g. 250" aria-label="Weight amount">
+                <select id="item-weight-unit" aria-label="Weight unit">
+                  <option value="G">G (gram)</option>
+                  <option value="KG">KG (kilogram)</option>
+                  <option value="MG">MG (milligram)</option>
+                </select>
+                <button id="add-weight-option" type="button">Add option</button>
+              </div>
+            </div>
+            <div id="weight-options-list" class="weight-options-list" aria-live="polite"></div>
+            <small>Add up to 20 package weights. Customers choose one in the cart; item price is per 1 KG.</small>
+          </fieldset>
           <div class="field-group">
             <label>Images (1–3)</label>
             <input id="item-images" type="file" accept="image/*" multiple>
@@ -84,7 +113,7 @@
     </div>
   </main>
 
-  <script type="module" src="js/auth.js?v=12"></script>
-  <script type="module" src="js/items.js?v=9"></script>
+  <script type="module" src="js/auth.js?v=14"></script>
+  <script type="module" src="js/items.js?v=13"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-import { firebaseApp } from '../../shared/firebase.js';
+import { firebaseApp } from '../../shared/firebase.js?v=2';
 import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
 
 const auth = getAuth(firebaseApp);

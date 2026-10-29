@@ -2,7 +2,7 @@ const navigationItems = [
 	['Dashboard', 'dashboard.html'],
 	['Categories', 'categories.html'],
 	['Catalog Items', 'items.html'],
-	['Tables', 'tables.html'],
+	['Add promo', 'promos.html'],
 	['WhatsApp', 'whatsapp.html'],
 	['Settings', 'settings.html']
 ];
@@ -30,15 +30,14 @@ export function initializeAdminLayout(){
 		sidebar.appendChild(navigation);
 	}
 	navigation.setAttribute('aria-label','Admin sections');
-	navigation.querySelectorAll('a[href="orders.html"]').forEach(link=>link.remove());
-	if(!navigation.querySelector('a')){
-		navigationItems.forEach(([label,href])=>{
+	navigationItems.forEach(([label,href])=>{
+		if(!navigation.querySelector(`a[href="${href}"]`)){
 			const link = document.createElement('a');
 			link.href = href;
 			link.textContent = label;
 			navigation.appendChild(link);
-		});
-	}
+		}
+	});
 	if(!navigation.querySelector('a[href="admins.html"]')){
 		const accountsLink = document.createElement('a');
 		accountsLink.href = 'admins.html';
@@ -46,7 +45,6 @@ export function initializeAdminLayout(){
 		navigation.appendChild(accountsLink);
 	}
 	navigation.querySelectorAll('a').forEach(link=>{
-		if(link.getAttribute('href') === 'tables.html') link.textContent = 'Tables';
 		const active = link.getAttribute('href') === currentPage;
 		link.classList.toggle('active',active);
 		if(active) link.setAttribute('aria-current','page');
