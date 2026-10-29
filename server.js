@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import compression from 'compression';
@@ -30,6 +31,29 @@ function getFirebaseAdminApp(){
 			serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
 		}catch(error){
 			throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON must contain valid JSON.',{cause:error});
+		}
+		if(serviceAccount.project_id !== projectId){
+			throw new Error('Firebase Admin service account project_id does not match FIREBASE_PROJECT_ID.');
+		}
+		credential = cert(serviceAccount);
+	}else if(process.env.GOOGLE_APPLICATION_CREDENTIALS){
+		const configuredCredential = process.env.GOOGLE_APPLICATION_CREDENTIALS.trim();
+		let serviceAccountJson;
+		if(configuredCredential.startsWith('{')){
+			serviceAccountJson = configuredCredential;
+		}else{
+			const credentialPath = path.resolve(projectRoot,configuredCredential);
+			try{
+				serviceAccountJson = readFileSync(credentialPath,'utf8');
+			}catch(error){
+				throw new Error('Could not read the file configured by GOOGLE_APPLICATION_CREDENTIALS.',{cause:error});
+			}
+		}
+		let serviceAccount;
+		try{
+			serviceAccount = JSON.parse(serviceAccountJson);
+		}catch(error){
+			throw new Error('The file configured by GOOGLE_APPLICATION_CREDENTIALS must contain valid JSON.',{cause:error});
 		}
 		if(serviceAccount.project_id !== projectId){
 			throw new Error('Firebase Admin service account project_id does not match FIREBASE_PROJECT_ID.');
